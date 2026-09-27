@@ -1,0 +1,38 @@
+name: Synthetic User Agent
+
+on:
+  schedule:
+    - cron: "*/2 * * * *"
+  workflow_dispatch:
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Select random persona
+        id: persona
+        run: |
+          PERSONAS=("casual_browser" "product_researcher" "potential_buyer" "goal_oriented_buyer")
+          PERSONA=${PERSONAS[$RANDOM % ${#PERSONAS[@]}]}
+          echo "persona=$PERSONA" >> "$GITHUB_OUTPUT"
+          echo "Selected persona: $PERSONA"
+
+      - name: Run synthetic user agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python main.py --agent-test --persona "${{ steps.persona.outputs.persona }}"
