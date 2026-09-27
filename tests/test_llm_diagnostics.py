@@ -34,7 +34,7 @@ class GeminiDiagnosticInstrumentationTests(unittest.TestCase):
             status="requires_action",
         )
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-placeholder"}):
-            llm = GeminiLLM("gemini-3.8-flash", client=client)
+            llm = GeminiLLM("gemini-3.5-flash-lite", client=client)
             diagnostics, response, decision, error = llm.diagnose_tool_call(
                 "test-gemini",
                 [{"role": "user", "content": "Finish."}],
@@ -69,7 +69,7 @@ class GeminiDiagnosticInstrumentationTests(unittest.TestCase):
             )
         self.assertTrue(diagnostics.http_success)
         self.assertEqual(diagnostics.provider, "gemini")
-        self.assertEqual(diagnostics.model, "gemini-3.8-flash")
+        self.assertEqual(diagnostics.model, "gemini-3.5-flash-lite")
         self.assertEqual(diagnostics.tool_call_count, 1)
         self.assertEqual(diagnostics.parsed_tool_names, ("session_plan",))
         self.assertEqual(
@@ -85,7 +85,7 @@ class GeminiDiagnosticInstrumentationTests(unittest.TestCase):
         client.interactions.create.side_effect = TimeoutError("diagnostic timeout")
 
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-placeholder"}):
-            llm = GeminiLLM("gemini-3.8-flash", client=client)
+            llm = GeminiLLM("gemini-3.5-flash-lite", client=client)
 
             diagnostics, response, decision, error = llm.diagnose_tool_call(
                 "test-timeout",

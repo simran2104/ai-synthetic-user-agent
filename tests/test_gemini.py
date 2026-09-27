@@ -49,13 +49,13 @@ class GeminiProviderTests(unittest.TestCase):
     def test_missing_api_key_fails_clearly(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaisesRegex(GeminiConfigurationError, "GEMINI_API_KEY is not set"):
-                GeminiLLM("gemini-3.8-flash", client=self.make_client())
+                GeminiLLM("gemini-3.5-flash-lite", client=self.make_client())
 
     def test_initializes_with_environment_key_without_logging_or_echoing_it(self) -> None:
         secret = "test-only-not-a-real-key"
         with patch.dict(os.environ, {"GEMINI_API_KEY": secret}):
-            provider = GeminiLLM("gemini-3.8-flash", timeout_seconds=12, client=self.make_client())
-        self.assertEqual(provider.model, "gemini-3.8-flash")
+            provider = GeminiLLM("gemini-3.5-flash-lite", timeout_seconds=12, client=self.make_client())
+        self.assertEqual(provider.model, "gemini-3.5-flash-lite")
         self.assertEqual(provider.provider, "gemini")
         self.assertEqual(provider.timeout_seconds, 12)
         self.assertNotIn(secret, repr(provider.__dict__))
@@ -63,7 +63,7 @@ class GeminiProviderTests(unittest.TestCase):
     def test_parses_native_session_plan_function_call(self) -> None:
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-placeholder"}):
             provider = GeminiLLM(
-                "gemini-3.8-flash",
+                "gemini-3.5-flash-lite",
                 client=self.make_client(),
             )
 
@@ -93,7 +93,7 @@ class GeminiProviderTests(unittest.TestCase):
 
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-placeholder"}):
             provider = GeminiLLM(
-                "gemini-3.8-flash",
+                "gemini-3.5-flash-lite",
                 client=client,
             )
 
@@ -122,7 +122,7 @@ class GeminiProviderTests(unittest.TestCase):
 
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-placeholder"}):
             provider = GeminiLLM(
-                "gemini-3.8-flash",
+                "gemini-3.5-flash-lite",
                 client=client,
             )
 
@@ -153,7 +153,7 @@ class GeminiProviderTests(unittest.TestCase):
 
     def test_settings_define_gemini_without_provider_fallback(self) -> None:
         settings = load_settings()
-        self.assertEqual(settings["gemini_model"], "gemini-3.8-flash")
+        self.assertEqual(settings["gemini_model"], "gemini-3.5-flash-lite")
 
     def test_gemini_smoke_test_does_not_create_a_browser(self) -> None:
         settings = load_settings()

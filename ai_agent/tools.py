@@ -249,8 +249,10 @@ class BrowserToolDispatcher:
             raise ToolArgumentError("Action reason must be a string of at most 160 characters.")
         if action == "finish":
             reason = reason or "goal_completed"
-            if reason not in FINISH_REASONS:
-                raise ToolArgumentError(f"Finish reason {reason!r} is not allowed.")
+            if not isinstance(reason, str) or not reason.strip():
+                raise ToolArgumentError(
+                    "Finish reason must be a non-empty string."
+                )
             action_arguments = {"reason": reason}
         elif action == "open_link":
             action_arguments = {"link_text": target}
