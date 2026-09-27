@@ -12,7 +12,7 @@ from .browser import BrowserSession, BrowserSessionError
 from .llm import GeminiLLM, LLMError
 from .prompts import SYSTEM_PROMPT
 from .scenarios import Persona
-from .tools import BrowserToolDispatcher, NEXT_ACTION_SCHEMA
+from .tools import BrowserToolDispatcher, SESSION_PLAN_SCHEMA, ToolArgumentError
 
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,9 @@ class AgentRunResult:
     actions: int
     detail: str = ""
     tool_history: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    llm_requests: int = 0
+    duration_seconds: float = 0.0
+    tool_errors: tuple[str, ...] = field(default_factory=tuple)
 
 
 def compact_observation(observation: dict[str, Any]) -> dict[str, Any]:
@@ -87,90 +90,147 @@ class Agent:
             print(message)
 
     def run(self) -> AgentRunResult:
-        """Run until the model finishes or a configured safety limit is reached."""
+        """Request one complete Gemini plan, validate it, then execute locally."""
         history: list[dict[str, Any]] = []
         action_count = 0
+        llm_requests = 0
         started_at = time.monotonic()
         repeat_counts: dict[tuple[str, str], int] = {}
-        last_result: dict[str, Any] | None = None
+        tool_errors: list[str] = []
+
+        def result(reason: str, detail: str = "") -> AgentRunResult:
+            duration = time.monotonic() - started_at
+            logger.info(
+                "agent_session_finished persona=%s gemini_requests=%s actions=%s duration_seconds=%.3f result=%s tool_errors=%s",
+                self.persona.name,
+                llm_requests,
+                action_count,
+                duration,
+                reason,
+                len(tool_errors),
+            )
+            return AgentRunResult(
+                termination_reason=reason,
+                actions=action_count,
+                detail=detail,
+                tool_history=tuple(history),
+                llm_requests=llm_requests,
+                duration_seconds=duration,
+                tool_errors=tuple(tool_errors),
+            )
 
         try:
             current_observation = self.browser.observe_page()
             self.dispatcher.remember_observation(current_observation)
         except (BrowserSessionError, Exception) as exc:
             logger.exception("agent_error while observing initial page")
-            return AgentRunResult("agent_error", 0, f"Initial observation failed: {exc}")
+            tool_errors.append(f"initial_observation: {type(exc).__name__}")
+            return result("agent_error", f"Initial observation failed: {exc}")
 
-        self._print(f"Session started\nPersona: {self.persona.name}\nGoal: {self.persona.goal}\nCurrent URL: {current_observation['url']}")
-        while True:
+        self._print(
+            f"Session started\nPersona: {self.persona.name}\nGoal: {self.persona.goal}\n"
+            f"Current URL: {current_observation['url']}"
+        )
+        website_capabilities = [
+            "Home, product listings, categories, search, filters, sorting, pagination, and product details",
+            "Cart, wishlist, login, account, enquiry, and contact functionality only where visible and allowed",
+            "No verified online checkout, payment, or order workflow",
+        ]
+        decision_messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps({
+                "persona": {"name": self.persona.name, "description": self.persona.description},
+                "goal": self.persona.goal,
+                "website_capabilities": website_capabilities,
+                "current_observation": compact_observation(current_observation),
+                "allowed_actions": self.dispatcher.allowed_actions(),
+                "plan_requirements": {
+                    "max_actions": self.max_actions,
+                    "end_with": "finish",
+                    "exactly_one_complete_plan": True,
+                    "do_not_plan_actions_after_finish": True,
+                },
+            }, ensure_ascii=False)},
+        ]
+        if time.monotonic() - started_at >= self.max_session_seconds:
+            return result("session_timeout", "Maximum session duration reached before planning.")
+
+        llm_requests += 1
+        self._print("Gemini request count: 1")
+        try:
+            plan_decision = self.llm.plan_session(decision_messages, [SESSION_PLAN_SCHEMA])
+        except LLMError as exc:
+            logger.exception("agent_error while requesting session plan")
+            tool_errors.append(f"gemini_plan:{type(exc).__name__}")
+            return result("agent_error", str(exc))
+
+        if plan_decision.name != "session_plan":
+            tool_errors.append("invalid_plan_function")
+            return result("agent_error", f"Expected session_plan, received {plan_decision.name!r}.")
+        try:
+            plan = self.dispatcher.validate_session_plan(
+                plan_decision.arguments,
+                set(self.dispatcher.allowed_actions()),
+                self.max_actions,
+            )
+        except ToolArgumentError as exc:
+            logger.error("session_plan_invalid error=%s", exc)
+            tool_errors.append("invalid_session_plan")
+            return result("agent_error", f"Invalid session plan: {exc}")
+
+        self._print(f"Planned actions: {len(plan)}")
+        self._print(f"Action plan: {json.dumps(plan_decision.arguments, ensure_ascii=False)}")
+        logger.info(
+            "session_plan_valid persona=%s gemini_requests=1 planned_actions=%s",
+            self.persona.name,
+            len(plan),
+        )
+
+        for action_index, (action, action_arguments) in enumerate(plan, start=1):
             if time.monotonic() - started_at >= self.max_session_seconds:
-                return AgentRunResult("session_timeout", action_count, "Maximum session duration reached.", tuple(history))
-            if action_count >= self.max_actions:
-                return AgentRunResult("maximum_actions_reached", action_count, "Maximum action count reached.", tuple(history))
-
-            try:
-                decision_messages = [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": json.dumps({
-                        "persona": self.persona.name,
-                        "goal": self.persona.goal,
-                        "current_observation": compact_observation(current_observation),
-                        "allowed_actions": self.dispatcher.allowed_actions(),
-                        "previous_action_result": last_result,
-                    }, ensure_ascii=False)},
-                ]
-                decision = self.llm.decide(decision_messages, [NEXT_ACTION_SCHEMA])
-            except LLMError as exc:
-                logger.exception("agent_error during structured LLM decision")
-                return AgentRunResult("agent_error", action_count, str(exc), tuple(history))
-
-            if decision.name != "next_action":
-                return AgentRunResult(
-                    "agent_error",
-                    action_count,
-                    f"Expected the next_action tool, received {decision.name!r}.",
-                    tuple(history),
-                )
+                return result("session_timeout", "Maximum session duration reached.")
 
             action_count += 1
-            self._print(
-                f"\nAction #{action_count}\nLLM tool: next_action\n"
-                f"Arguments: {json.dumps(decision.arguments, ensure_ascii=False)}"
-            )
+            self._print(f"\nAction #{action_count}\nPlanned action: {action}\nArguments: {json.dumps(action_arguments, ensure_ascii=False)}")
             pre_action_fingerprint = self._state_fingerprint(current_observation)
-            action_fingerprint = self._action_fingerprint("next_action", decision.arguments)
+            try:
+                tool_result = self.dispatcher.dispatch(action, action_arguments)
+            except Exception as exc:
+                logger.exception("plan_action_failed action=%s index=%s", action, action_index)
+                tool_result = None
+                error = f"{action}:{type(exc).__name__}"
+                tool_errors.append(error)
+                history.append({"action": action, "arguments": action_arguments, "success": False, "error": error})
+                self._print(f"Action error: {error}; ending without another Gemini request.")
+                return result("agent_error", f"Action {action_index} failed: {exc}")
 
-            result = self.dispatcher.dispatch_next_action(decision.arguments)
-            result_data = result.to_dict()
-            self._print(f"Tool result:\n{json.dumps(result_data, indent=2, ensure_ascii=False)}")
-            history.append({"name": "next_action", "arguments": decision.arguments, "result": result_data})
-            last_result = result_data
+            result_data = tool_result.to_dict()
+            self._print(f"Action result:\n{json.dumps(result_data, indent=2, ensure_ascii=False)}")
+            history.append({"action": action, "arguments": action_arguments, "result": result_data})
+            if not tool_result.success:
+                tool_errors.append(f"{action}:{tool_result.error or 'failed'}")
+                return result("agent_error", f"Action {action_index} ({action}) failed: {tool_result.error or tool_result.detail}")
 
-            if result.finished:
-                reason = result.data["reason"]
-                logger.info("agent_session_completed persona=%s actions=%s reason=%s", self.persona.name, action_count, reason)
-                return AgentRunResult(reason, action_count, tool_history=tuple(history))
+            if tool_result.finished:
+                reason = tool_result.data["reason"]
+                return result(reason)
 
             try:
                 current_observation = self.browser.observe_page()
                 self.dispatcher.remember_observation(current_observation)
-            except BrowserSessionError as exc:
-                logger.exception("agent_error after tool execution")
-                return AgentRunResult("agent_error", action_count, f"Post-action observation failed: {exc}", tuple(history))
+            except Exception as exc:
+                logger.exception("post_action_observation_failed action=%s", action)
+                tool_errors.append(f"observation:{type(exc).__name__}")
+                return result("agent_error", f"Post-action observation failed: {exc}")
 
             post_action_fingerprint = self._state_fingerprint(current_observation)
+            action_fingerprint = self._action_fingerprint(action, action_arguments)
             repeat_key = (action_fingerprint, post_action_fingerprint)
             if post_action_fingerprint == pre_action_fingerprint:
                 repeat_counts[repeat_key] = repeat_counts.get(repeat_key, 0) + 1
             else:
-                repeat_counts = {
-                    key: count for key, count in repeat_counts.items()
-                    if key[0] != action_fingerprint
-                }
+                repeat_counts = {key: count for key, count in repeat_counts.items() if key[0] != action_fingerprint}
             if repeat_counts.get(repeat_key, 0) >= self.max_repeated_action_repetitions:
-                return AgentRunResult(
-                    "repeated_action_limit",
-                    action_count,
-                    f"Action {decision.arguments.get('action')!r} repeated without page progress.",
-                    tuple(history),
-                )
+                return result("repeated_action_limit", f"Action {action!r} repeated without page progress.")
+
+        return result("agent_error", "Validated plan ended without finish.")

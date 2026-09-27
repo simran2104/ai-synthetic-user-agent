@@ -7,13 +7,21 @@ from unittest.mock import Mock, patch
 
 from ai_agent.llm import GeminiLLM, LLMCallDiagnostics
 from diagnose_llm import ProbeResult
+from ai_agent.tools import SESSION_PLAN_SCHEMA
 
 
 def function_call() -> SimpleNamespace:
     return SimpleNamespace(
         type="function_call",
-        name="next_action",
-        arguments={"action": "finish", "reason": "goal_completed"},
+        name="session_plan",
+        arguments={
+            "actions": [
+                {
+                    "action": "finish",
+                    "reason": "goal_completed",
+                }
+            ]
+        }
     )
 
 
@@ -33,37 +41,58 @@ class GeminiDiagnosticInstrumentationTests(unittest.TestCase):
                 [{
                     "type": "function",
                     "function": {
-                        "name": "next_action",
+                        "name": "session_plan",
                         "parameters": {
                             "type": "object",
-                            "properties": {"action": {"type": "string", "enum": ["finish"]}},
-                            "required": ["action"],
+                            "properties": {
+                                "actions": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "action": {
+                                                "type": "string",
+                                                "enum": ["finish"],
+                                            },
+                                            "reason": {
+                                                "type": "string",
+                                            },
+                                        },
+                                        "required": ["action"],
+                                    },
+                                }
+                            },
+                            "required": ["actions"],
                         },
-                    },
+                    }
                 }],
             )
         self.assertTrue(diagnostics.http_success)
         self.assertEqual(diagnostics.provider, "gemini")
         self.assertEqual(diagnostics.model, "gemini-3.8-flash")
         self.assertEqual(diagnostics.tool_call_count, 1)
-        self.assertEqual(diagnostics.parsed_tool_names, ("next_action",))
-        self.assertEqual(decision.arguments["action"], "finish")
+        self.assertEqual(diagnostics.parsed_tool_names, ("session_plan",))
+        self.assertEqual(
+            decision.arguments["actions"][0]["action"],
+            "finish",
+        )
         self.assertIsNotNone(response)
         self.assertIsNone(error)
 
     def test_request_error_records_failure_metadata(self) -> None:
         client = Mock()
+
         client.interactions.create.side_effect = TimeoutError("diagnostic timeout")
+
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-placeholder"}):
             llm = GeminiLLM("gemini-3.8-flash", client=client)
+
             diagnostics, response, decision, error = llm.diagnose_tool_call(
                 "test-timeout",
                 [{"role": "user", "content": "Finish."}],
-                [{
-                    "type": "function",
-                    "function": {"name": "next_action", "parameters": {"type": "object", "properties": {}, "required": []}},
-                }],
+                [SESSION_PLAN_SCHEMA],
             )
+
         self.assertFalse(diagnostics.http_success)
         self.assertEqual(diagnostics.error_type, "TimeoutError")
         self.assertIsNone(response)
@@ -75,7 +104,7 @@ class DiagnosticProbeResultTests(unittest.TestCase):
     @staticmethod
     def diagnostic(tool_calls: int, names: tuple[str, ...] = ()) -> LLMCallDiagnostics:
         return LLMCallDiagnostics(
-            model="gemini-3.8-flash",
+            model="gemini-3.5-flash-lite",
             message_count=2,
             message_characters=100,
             tool_count=1,

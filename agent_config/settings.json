@@ -1,5 +1,5 @@
 {
-  "gemini_model": "gemini-3.8-flash",
+  "gemini_model": "gemini-3.5-flash-lite",
   "gemini_timeout_seconds": 120,
   "website_url": "https://furniture-mart-ps3p.onrender.com/",
   "headless": false,

@@ -179,8 +179,8 @@ class GeminiLLM:
         arguments = getattr(call, "arguments", None)
         if not isinstance(name, str) or not name:
             raise LLMProtocolError("Gemini returned a function call without a valid name.")
-        if name != "next_action":
-            raise LLMProtocolError(f"Gemini returned unsupported function {name!r}; expected 'next_action'.")
+        if name != "session_plan":
+            raise LLMProtocolError(f"Gemini returned unsupported function {name!r}; expected 'session_plan'.")
         if not isinstance(arguments, Mapping):
             raise LLMProtocolError(f"Gemini returned invalid arguments for function {name!r}.")
         return LLMToolDecision(name=name, arguments=dict(arguments), assistant_message=response)
@@ -190,7 +190,7 @@ class GeminiLLM:
         function = tool_schema.get("function", {})
         parameters = function.get("parameters")
         if not isinstance(parameters, dict):
-            raise ValueError("The next_action tool requires an object parameter schema.")
+            raise ValueError("The session_plan tool requires an object parameter schema.")
         return {
             "type": "function",
             "name": function.get("name"),
@@ -227,8 +227,8 @@ class GeminiLLM:
         if len(tool_schemas) != 1:
             raise ValueError("Gemini must receive exactly one structured tool.")
         tool = self._tool_declaration(tool_schemas[0])
-        if tool["name"] != "next_action":
-            raise ValueError("Gemini only accepts the structured next_action tool.")
+        if tool["name"] != "session_plan":
+            raise ValueError("Gemini only accepts the structured session_plan tool.")
         system_instruction, user_input = self._prepare_messages(messages)
         request_started = datetime.now(timezone.utc)
         start_time = time.perf_counter()
@@ -253,7 +253,7 @@ class GeminiLLM:
                     "tool_choice": {
                         "allowed_tools": {
                             "mode": "any",
-                            "tools": ["next_action"],
+                            "tools": ["session_plan"],
                         }
                     },
                 },
@@ -276,9 +276,11 @@ class GeminiLLM:
 
         calls = [step for step in (getattr(response, "steps", None) or []) if getattr(step, "type", None) == "function_call"]
         names = [getattr(call, "name", "") for call in calls]
-        action = None
+        planned_actions: list[str] = []
         if len(calls) == 1 and isinstance(getattr(calls[0], "arguments", None), Mapping):
-            action = calls[0].arguments.get("action")
+            plan_items = calls[0].arguments.get("actions")
+            if isinstance(plan_items, list):
+                planned_actions = [item.get("action", "") for item in plan_items if isinstance(item, Mapping)]
         result_metadata = {
             **metadata,
             "request_ended_at": datetime.now(timezone.utc).isoformat(),
@@ -289,7 +291,7 @@ class GeminiLLM:
             "response_content_characters": len(getattr(response, "output_text", "") or ""),
             "tool_call_count": len(calls),
             "parsed_tool_names": names,
-            "selected_action": action,
+            "planned_actions": planned_actions,
         }
         logger.info("llm_request_completed %s", json.dumps(result_metadata, sort_keys=True))
         return response, result_metadata
@@ -302,11 +304,12 @@ class GeminiLLM:
             text = text.replace(secret, "[REDACTED]")
         return text[:1000]
 
-    def decide(
+    def plan_session(
         self,
         messages: Sequence[Mapping[str, Any] | Any],
         tool_schemas: Sequence[dict[str, Any]],
     ) -> LLMToolDecision:
+        """Request the complete session plan in exactly one Gemini call."""
         response, _metadata = self._request(messages, tool_schemas)
         return self._parse_function_call(response)
 

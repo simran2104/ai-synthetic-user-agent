@@ -80,36 +80,43 @@ ACTION_NAMES = (
     "finish",
 )
 TARGET_ACTIONS = frozenset({"open_link", "search", "view_product", "add_to_cart"})
-NEXT_ACTION_SCHEMA: dict[str, Any] = {
+SESSION_PLAN_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
-        "name": "next_action",
-        "description": "Choose exactly one allowed Furniture Mart browser action.",
+        "name": "session_plan",
+        "description": "Return the complete bounded action plan for this synthetic visitor session.",
         "parameters": {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": list(ACTION_NAMES)},
-                "target": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 180,
-                    "description": (
-                        "For open_link, use an observed link label or the exact internal Furniture Mart URL "
-                        "shown in the current page observation. For view_product, use an observed product name "
-                        "or the exact internal Furniture Mart product URL shown in the current page observation. "
-                        "URLs must be observed internal Furniture Mart URLs: do not invent URLs or use external URLs. "
-                        "When a suitable observed target is available, use it directly instead of attempting recovery "
-                        "through another action."
-                    ),
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": list(ACTION_NAMES)},
+                            "target": {
+                                "type": ["string", "null"],
+                                "minLength": 1,
+                                "maxLength": 180,
+                                "description": (
+                                    "For open_link use an observed link label or exact observed internal URL. "
+                                    "For view_product use an observed product name or exact observed internal product URL. "
+                                    "Never invent targets or use external URLs."
+                                ),
+                            },
+                            "reason": {"type": "string", "maxLength": 160},
+                        },
+                        "required": ["action"],
+                        "additionalProperties": False,
+                    },
                 },
-                "reason": {"type": "string", "enum": list(FINISH_REASONS)},
             },
-            "required": ["action"],
+            "required": ["actions"],
             "additionalProperties": False,
         },
     },
 }
-TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (NEXT_ACTION_SCHEMA,)
+TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (SESSION_PLAN_SCHEMA,)
 ACTION_ARGUMENT_SCHEMAS: dict[str, dict[str, Any]] = {
     "open_link": {"type": "object", "properties": {"link_text": {"type": "string", "minLength": 1, "maxLength": 160}}, "required": ["link_text"]},
     "search": {"type": "object", "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 160}}, "required": ["query"]},
@@ -146,7 +153,7 @@ class BrowserToolDispatcher:
 
     def available_tool_schemas(self) -> list[dict[str, Any]]:
         """Return exactly one native tool schema to the language model."""
-        return [NEXT_ACTION_SCHEMA]
+        return [SESSION_PLAN_SCHEMA]
 
     def allowed_actions(self) -> list[str]:
         """Return actions permitted by current session configuration."""
@@ -214,24 +221,36 @@ class BrowserToolDispatcher:
         arguments: Any,
         allowed_actions: set[str] | frozenset[str] | None = None,
     ) -> tuple[str, dict[str, Any]]:
-        """Validate the envelope and convert it to one existing browser action."""
-        validated = BrowserToolDispatcher._validate_arguments(NEXT_ACTION_SCHEMA, arguments)
-        action = validated["action"]
+        """Validate one plan item and convert it to an existing browser action."""
+        if not isinstance(arguments, dict):
+            raise ToolArgumentError("Each plan action must be an object.")
+        unknown = set(arguments) - {"action", "target", "reason"}
+        if unknown:
+            raise ToolArgumentError(f"Unexpected plan field(s): {', '.join(sorted(unknown))}.")
+        action = arguments.get("action")
+        if not isinstance(action, str):
+            raise ToolArgumentError("Each plan action requires a string 'action'.")
         if action not in ACTION_NAMES:
             raise ToolArgumentError(f"Unknown action {action!r}.")
         if allowed_actions is not None and action not in allowed_actions:
             raise ToolArgumentError(f"Action {action!r} is not allowed in this session.")
 
-        target = validated.get("target")
+        target = arguments.get("target")
         if action in TARGET_ACTIONS:
             if not isinstance(target, str) or not target.strip():
                 raise ToolArgumentError(f"Action {action!r} requires a non-empty target.")
+            if len(target) > 180:
+                raise ToolArgumentError(f"Action {action!r} target is too long.")
         elif target is not None:
             raise ToolArgumentError(f"Action {action!r} does not accept a target.")
 
-        reason = validated.get("reason")
+        reason = arguments.get("reason")
+        if reason is not None and (not isinstance(reason, str) or len(reason) > 160):
+            raise ToolArgumentError("Action reason must be a string of at most 160 characters.")
         if action == "finish":
             reason = reason or "goal_completed"
+            if reason not in FINISH_REASONS:
+                raise ToolArgumentError(f"Finish reason {reason!r} is not allowed.")
             action_arguments = {"reason": reason}
         elif action == "open_link":
             action_arguments = {"link_text": target}
@@ -242,6 +261,39 @@ class BrowserToolDispatcher:
         else:
             action_arguments = {}
         return action, action_arguments
+
+    @staticmethod
+    def validate_session_plan(
+        payload: Any,
+        allowed_actions: set[str] | frozenset[str],
+        max_actions: int,
+    ) -> list[tuple[str, dict[str, Any]]]:
+        """Validate plan structure, permissions, bounds, and finish placement."""
+        if not isinstance(payload, dict) or set(payload) != {"actions"}:
+            raise ToolArgumentError("A session plan must contain only an 'actions' array.")
+        actions = payload["actions"]
+        if not isinstance(actions, list) or not actions:
+            raise ToolArgumentError("A session plan must contain at least one action.")
+        if len(actions) > max_actions:
+            raise ToolArgumentError(f"The plan has {len(actions)} actions; the session limit is {max_actions}.")
+
+        validated: list[tuple[str, dict[str, Any]]] = []
+        for index, item in enumerate(actions):
+            action, action_arguments = BrowserToolDispatcher.validate_next_action(item, allowed_actions)
+            if action == "finish" and index != len(actions) - 1:
+                raise ToolArgumentError("finish must be the final plan action.")
+            if action in {"open_link", "view_product"}:
+                target = item.get("target", "").strip()
+                parsed = urlsplit(target)
+                if (parsed.scheme or parsed.netloc) and not BrowserSession._is_allowed_url(target):
+                    raise ToolArgumentError(f"{action} URL at action {index + 1} is outside the allowed Furniture Mart origin.")
+                if action == "view_product" and (parsed.scheme or parsed.netloc) and not url_path(target).startswith("/product/"):
+                    raise ToolArgumentError(f"view_product URL at action {index + 1} is not a product detail URL.")
+            validated.append((action, action_arguments))
+
+        if validated[-1][0] != "finish":
+            raise ToolArgumentError("The complete session plan must end with finish.")
+        return validated
 
     def dispatch_next_action(self, arguments: Any) -> ToolResult:
         """Validate a next_action payload, enforce permissions, and dispatch it."""

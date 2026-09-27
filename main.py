@@ -14,7 +14,7 @@ from ai_agent.agent import Agent
 from ai_agent.browser import BrowserSession, BrowserSessionError
 from ai_agent.llm import GeminiLLM, LLMError
 from ai_agent.scenarios import PersonaConfigurationError, load_personas
-from ai_agent.tools import BrowserToolDispatcher, NEXT_ACTION_SCHEMA
+from ai_agent.tools import BrowserToolDispatcher, SESSION_PLAN_SCHEMA
 
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "agent_config" / "settings.json"
@@ -90,8 +90,6 @@ def run_browser_test(settings: dict[str, Any]) -> int:
 def run_agent_test(settings: dict[str, Any], persona_name: str) -> int:
     """Run one configured persona with the active LLM provider and real browser."""
     try:
-        if persona_name != "casual_browser":
-            raise ValueError("Milestone 3 integration currently permits only the read-only casual_browser persona.")
         persona = load_personas().get(persona_name)
         if persona is None:
             raise PersonaConfigurationError(f"Persona {persona_name!r} is not configured.")
@@ -135,7 +133,7 @@ def run_agent_test(settings: dict[str, Any], persona_name: str) -> int:
         return 1
 
 def run_gemini_test(settings: dict[str, Any]) -> int:
-    """Make one minimal native next_action call without launching Playwright."""
+    """Make one minimal native session_plan call without launching Playwright."""
     try:
         llm = GeminiLLM(
             model=settings["gemini_model"],
@@ -144,7 +142,7 @@ def run_gemini_test(settings: dict[str, Any]) -> int:
         messages = [
             {
                 "role": "system",
-                "content": "You are a synthetic website user. Choose the next action. Return exactly one next_action function call. Do not provide an explanation.",
+                "content": "You are a synthetic website user. Return one complete session_plan function call with one finish action. Do not provide an explanation.",
             },
             {
                 "role": "user",
@@ -156,11 +154,15 @@ def run_gemini_test(settings: dict[str, Any]) -> int:
                 }),
             },
         ]
-        decision = llm.decide(messages, [NEXT_ACTION_SCHEMA])
-        if decision.name != "next_action":
-            raise ValueError(f"Expected next_action, received {decision.name!r}.")
-        action, arguments = BrowserToolDispatcher.validate_next_action(decision.arguments, {"finish"})
-        print(json.dumps({"tool": decision.name, "action": action, "arguments": arguments}, ensure_ascii=False))
+        decision = llm.plan_session(messages, [SESSION_PLAN_SCHEMA])
+        if decision.name != "session_plan":
+            raise ValueError(f"Expected session_plan, received {decision.name!r}.")
+        plan = BrowserToolDispatcher.validate_session_plan(
+            decision.arguments,
+            {"finish"},
+            settings["max_actions"],
+        )
+        print(json.dumps({"tool": decision.name, "actions": plan}, ensure_ascii=False))
     except (LLMError, ValueError) as exc:
         print(f"Gemini test failed: {exc}", file=sys.stderr)
         return 1
@@ -174,7 +176,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode_group.add_argument("--browser-test", action="store_true", help="Open and observe the Furniture Mart homepage.")
     mode_group.add_argument("--agent-test", action="store_true", help="Run one LLM-driven browser persona.")
     mode_group.add_argument("--gemini-test", action="store_true", help="Test one Gemini next_action call without Playwright.")
-    parser.add_argument("--persona", default="casual_browser", choices=("casual_browser",), help="Read-only persona for the first integration test.")
+    parser.add_argument("--persona", default="casual_browser", choices=("casual_browser","product_researcher", "potential_buyer", "goal_oriented_buyer",), help="Read-only persona for the first integration test.")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")

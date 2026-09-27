@@ -11,7 +11,7 @@ from ai_agent.browser import BrowserSession, BrowserSessionError
 from ai_agent.llm import GeminiLLM, LLMCallDiagnostics
 from ai_agent.prompts import SYSTEM_PROMPT
 from ai_agent.scenarios import load_personas
-from ai_agent.tools import ACTION_NAMES, BrowserToolDispatcher, NEXT_ACTION_SCHEMA, ToolArgumentError
+from ai_agent.tools import ACTION_NAMES, BrowserToolDispatcher, SESSION_PLAN_SCHEMA, ToolArgumentError
 from main import load_settings
 
 
@@ -61,7 +61,7 @@ def run_homepage_probe() -> ProbeResult:
             message_count=0,
             message_characters=0,
             tool_count=1,
-            tool_schema_characters=len(json.dumps(NEXT_ACTION_SCHEMA)),
+            tool_schema_characters=len(json.dumps(SESSION_PLAN_SCHEMA)),
             request_started_at="",
             request_ended_at="",
             duration_seconds=0,
@@ -93,7 +93,7 @@ def run_homepage_probe() -> ProbeResult:
     diagnostics, _response, decision, error = llm.diagnose_tool_call(
         "single-next-action-homepage",
         messages,
-        [NEXT_ACTION_SCHEMA],
+        [SESSION_PLAN_SCHEMA],
     )
 
     selected_action: str | None = None

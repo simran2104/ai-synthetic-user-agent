@@ -7,7 +7,7 @@ from unittest.mock import Mock
 from ai_agent.agent import Agent
 from ai_agent.browser import BrowserSession
 from ai_agent.scenarios import load_personas
-from ai_agent.tools import ACTION_NAMES, BrowserToolDispatcher, NEXT_ACTION_SCHEMA, ToolResult
+from ai_agent.tools import ACTION_NAMES, BrowserToolDispatcher, SESSION_PLAN_SCHEMA, ToolResult
 
 
 WEBSITE_URL = "https://furniture-mart-ps3p.onrender.com/"
@@ -34,23 +34,34 @@ def tool_response(name: str, arguments: dict[str, object]) -> SimpleNamespace:
 
 
 class FakeLLM:
-    def __init__(self, decisions: list[dict[str, object]]) -> None:
-        self.decisions = list(decisions)
+    def __init__(self, plans: list[dict[str, object]]) -> None:
+        self.plans = list(plans)
         self.calls = 0
         self.supplied_schemas: list[list[dict[str, object]]] = []
         self.messages: list[list[object]] = []
 
-    def decide(self, messages: object, tool_schemas: object) -> SimpleNamespace:
+    def plan_session(self, messages: object, tool_schemas: object) -> SimpleNamespace:
         self.calls += 1
         self.supplied_schemas.append(tool_schemas)
         self.messages.append(messages)
-        arguments = self.decisions.pop(0)
-        return SimpleNamespace(
-            name="next_action",
-            arguments=arguments,
-            assistant_message={"role": "assistant", "tool_calls": [{"function": {"name": "next_action", "arguments": arguments}}]},
-        )
 
+        arguments = self.plans.pop(0)
+
+        return SimpleNamespace(
+            name="session_plan",
+            arguments=arguments,
+            assistant_message={
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "session_plan",
+                            "arguments": arguments,
+                        }
+                    }
+                ],
+            },
+        )
 
 class BrowserToolDispatcherTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -59,13 +70,113 @@ class BrowserToolDispatcherTests(unittest.TestCase):
         self.browser.get_current_url.return_value = WEBSITE_URL
         self.dispatcher = BrowserToolDispatcher(self.browser)
 
-    def test_exposes_one_next_action_schema(self) -> None:
+    def test_exposes_one_session_plan_schema(self) -> None:
         schemas = self.dispatcher.available_tool_schemas()
-        self.assertEqual(len(schemas), 1)
-        self.assertEqual(schemas[0]["function"]["name"], "next_action")
-        self.assertEqual(set(schemas[0]["function"]["parameters"]["required"]), {"action"})
-        self.assertEqual(set(schemas[0]["function"]["parameters"]["properties"]["action"]["enum"]), set(ACTION_NAMES))
 
+        self.assertEqual(len(schemas), 1)
+        self.assertEqual(schemas[0]["function"]["name"], "session_plan")
+
+        parameters = schemas[0]["function"]["parameters"]
+
+        self.assertEqual(
+            set(parameters["required"]),
+            {"actions"},
+        )
+
+        self.assertIn("actions", parameters["properties"])
+        self.assertEqual(
+            set(parameters["properties"]["actions"]["items"]["properties"]["action"]["enum"]),
+            set(ACTION_NAMES),
+    )
+
+    def test_rejects_plan_without_finish(self) -> None:
+        plan = {
+            "actions": [
+                {
+                    "action": "view_product",
+                    "target": "Studio Transitional Dining Set",
+                }
+            ]
+        }
+
+        with self.assertRaises(ValueError):
+            BrowserToolDispatcher.validate_session_plan(
+                plan,
+                set(ACTION_NAMES),
+                max_actions=10,
+        )
+            
+    def test_rejects_action_after_finish(self) -> None:
+        plan = {
+            "actions": [
+                {
+                    "action": "finish",
+                    "reason": "goal_completed",
+                },
+                {
+                    "action": "go_back",
+                },
+            ]
+        }
+
+        with self.assertRaises(ValueError):
+            BrowserToolDispatcher.validate_session_plan(
+                plan,
+                set(ACTION_NAMES),
+                max_actions=10,
+        )
+            
+    def test_rejects_plan_exceeding_max_actions(self) -> None:
+        plan = {
+            "actions": [
+                {"action": "go_back"},
+                {"action": "go_back"},
+                {"action": "finish", "reason": "goal_completed"},
+            ]
+        }
+
+        with self.assertRaises(ValueError):
+            BrowserToolDispatcher.validate_session_plan(
+                plan,
+                set(ACTION_NAMES),
+                max_actions=2,
+        )
+
+    def test_validates_complete_session_plan(self) -> None:
+        plan = {
+            "actions": [
+                {
+                    "action": "open_link",
+                    "target": "Shop",
+                    "reason": "Browse products",
+                },
+                {
+                    "action": "view_product",
+                    "target": "Studio Transitional Dining Set",
+                    "reason": "Inspect a product",
+                },
+                {
+                    "action": "go_back",
+                    "target": None,
+                    "reason": "Return to products",
+                },
+                {
+                    "action": "finish",
+                    "target": None,
+                    "reason": "goal_completed",
+                },
+            ]
+        }
+
+        validated = BrowserToolDispatcher.validate_session_plan(
+            plan,
+            set(ACTION_NAMES),
+            max_actions=10,
+        )
+
+        self.assertEqual(len(validated), 4)
+        self.assertEqual(validated[-1][0], "finish")
+    
     def test_accepts_each_supported_action(self) -> None:
         sample_arguments = {
             "open_link": {"action": "open_link", "target": "Shop"},
@@ -173,52 +284,122 @@ class BrowserToolDispatcherTests(unittest.TestCase):
         self.assertEqual(result.data["reason"], "goal_completed")
 
 
+# tests/test_agent.py
+
 class AgentLoopTests(unittest.TestCase):
     def setUp(self) -> None:
         self.browser = Mock(spec=BrowserSession)
+        self.browser.page = Mock()
         self.browser.observe_page.return_value = OBSERVATION
+
+        self.browser.navigate.return_value = {
+            "url": "/product/test",
+            "title": "Test Product",
+        }
+
         self.persona = load_personas()["casual_browser"]
 
     def make_agent(self, llm: FakeLLM, **kwargs: object) -> Agent:
         return Agent(llm, self.browser, self.persona, debug=False, **kwargs)
 
-    def test_finishes_when_model_calls_finish(self) -> None:
-        llm = FakeLLM([{"action": "finish", "reason": "goal_completed"}])
+    # tests/test_agent.py
+
+    def test_executes_complete_plan_with_exactly_one_gemini_call(self) -> None:
+        llm = FakeLLM([
+            {
+                "actions": [
+                    {
+                        "action": "view_product",
+                        "target": "Test Product",
+                        "reason": "Inspect product",
+                    },
+                    {
+                        "action": "go_back",
+                        "reason": "Return to previous page",
+                    },
+                    {
+                        "action": "finish",
+                        "reason": "Goal completed",
+                    },
+                ]
+            }
+        ])
+
+        self.browser.navigate.return_value = {
+            "url": "/product/test",
+            "title": "Test Product",
+        }
+
         result = self.make_agent(llm).run()
-        self.assertEqual(result.termination_reason, "goal_completed")
-        self.assertEqual(result.actions, 1)
-        self.assertEqual(len(llm.supplied_schemas[0]), 1)
-        self.assertEqual(llm.supplied_schemas[0][0]["function"]["name"], "next_action")
-        prompt_data = __import__("json").loads(llm.messages[0][1]["content"])
-        self.assertIn("current_observation", prompt_data)
-        self.assertIn("allowed_actions", prompt_data)
-        self.assertNotIn("add_to_cart", prompt_data["allowed_actions"])
 
-    def test_stops_at_maximum_action_limit(self) -> None:
-        self.browser.get_current_url.return_value = WEBSITE_URL
-        self.browser.page = Mock()
-        llm = FakeLLM([{"action": "go_back"}, {"action": "go_back"}])
-        result = self.make_agent(llm, max_actions=1).run()
-        self.assertEqual(result.termination_reason, "maximum_actions_reached")
-        self.assertEqual(result.actions, 1)
         self.assertEqual(llm.calls, 1)
+    
+    def test_rejects_plan_exceeding_maximum_action_limit(self) -> None:
+        llm = FakeLLM([
+            {
+                "actions": [
+                    {"action": "go_back"},
+                    {"action": "go_back"},
+                    {"action": "finish", "reason": "goal_completed"},
+                ]
+            }
+        ])
 
-    def test_stops_repeated_action_without_progress(self) -> None:
-        self.browser.get_current_url.return_value = WEBSITE_URL
-        self.browser.page = Mock()
-        self.browser.page.go_back.return_value = None
-        llm = FakeLLM([{"action": "go_back"}, {"action": "go_back"}])
-        result = self.make_agent(llm, max_actions=10, max_repeated_action_repetitions=2).run()
-        self.assertEqual(result.termination_reason, "repeated_action_limit")
-        self.assertEqual(result.actions, 2)
+        result = self.make_agent(llm, max_actions=2).run()
+
+        self.assertEqual(result.termination_reason, "agent_error")
+        self.assertEqual(result.actions, 0)
+
+        # Gemini still called exactly once.
+        self.assertEqual(llm.calls, 1)
+        
+    def test_action_failure_does_not_trigger_second_gemini_call(self) -> None:
+        llm = FakeLLM([
+            {
+                "actions": [
+                    {
+                        "action": "view_product",
+                        "target": "Studio Transitional Dining Set",
+                        "reason": "Inspect product",
+                    },
+                    {
+                        "action": "finish",
+                        "reason": "goal_completed",
+                    },
+                ]
+            }
+        ])
+
+        self.browser.navigate.side_effect = RuntimeError("browser failure")
+
+        result = self.make_agent(llm).run()
+
+        self.assertEqual(result.termination_reason, "agent_error")
+
+        # Critical requirement:
+        self.assertEqual(llm.calls, 1)
 
     def test_cart_remains_disabled_even_if_global_setting_is_true_for_read_only_persona(self) -> None:
         llm = FakeLLM([
-            {"action": "add_to_cart", "target": "A product"},
-            {"action": "finish", "reason": "agent_error"},
+            {
+                "actions": [
+                    {
+                        "action": "add_to_cart",
+                        "target": "A product",
+                        "reason": "Test cart permission",
+                    },
+                    {
+                        "action": "finish",
+                        "reason": "agent_error",
+                    },
+                ]
+            }
         ])
         result = self.make_agent(llm, allow_cart_actions=True).run()
-        self.assertEqual(result.tool_history[0]["result"]["error"], "cart_actions_disabled")
+        self.assertEqual(llm.calls, 1)
+        self.assertEqual(result.termination_reason, "agent_error")
+        self.assertEqual(result.tool_errors[0], "invalid_session_plan")
+        self.assertEqual(result.tool_history, ())
 
 
 if __name__ == "__main__":
