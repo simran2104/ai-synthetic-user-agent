@@ -1,8 +1,12 @@
 name: Synthetic User Agent
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: "5,35 * * * *"
+    timezone: "Pacific/Auckland"
   workflow_dispatch:
 
 jobs:
