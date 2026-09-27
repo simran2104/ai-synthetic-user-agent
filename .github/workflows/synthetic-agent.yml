@@ -32,7 +32,7 @@ jobs:
           echo "Selected persona: $PERSONA"
 
       - name: Run synthetic user agent
-      env:
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      run: |
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
         xvfb-run -a python main.py --agent-test --persona "${{ steps.persona.outputs.persona }}"
