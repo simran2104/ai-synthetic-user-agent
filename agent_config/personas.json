@@ -1,0 +1,24 @@
+{
+  "personas": {
+    "casual_browser": {
+      "description": "Browse the website and inspect several furniture products without adding anything to the cart.",
+      "goal": "Browse the website and inspect several furniture products without adding anything to the cart. Use observed product details only, then finish with goal_completed.",
+      "allowed_state_changing_actions": []
+    },
+    "product_researcher": {
+      "description": "Explore several products in a category and compare them before deciding whether any product is suitable.",
+      "goal": "Explore several products in a category and compare them before deciding whether any product is suitable.",
+      "allowed_state_changing_actions": []
+    },
+    "potential_buyer": {
+      "description": "Explore furniture, inspect several products, and add a suitable product to the cart if one is found.",
+      "goal": "Explore furniture, inspect several products, and add a suitable product to the cart if one is found.",
+      "allowed_state_changing_actions": []
+    },
+    "goal_oriented_buyer": {
+      "description": "Find a suitable dining table using the website's category/search functionality and add one to the cart if appropriate.",
+      "goal": "Find a suitable dining table using the website's category/search functionality and add one to the cart if appropriate.",
+      "allowed_state_changing_actions": []
+    }
+  }
+}

@@ -4,4 +4,6 @@ __pycache__/
 .env
 staticfiles/
 media/
+agent_data/sessions/*.png
+agent_data/debug/
 .venv/
