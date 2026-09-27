@@ -121,6 +121,10 @@ class BrowserSession:
                     else None
                 )
             )
+            def log_ga4_response(response):
+                if "google-analytics.com" in response.url:
+                    print(f"GA4 RESPONSE: {response.status} {response.url}")
+            self.page.on("response", log_ga4_response)
         except (PlaywrightError, OSError) as exc:
             logger.exception("browser_error during startup")
             self.close()

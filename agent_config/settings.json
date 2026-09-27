@@ -2,7 +2,7 @@
   "gemini_model": "gemini-3.5-flash-lite",
   "gemini_timeout_seconds": 120,
   "website_url": "https://furniture-mart-ps3p.onrender.com/",
-  "headless": true,
+  "headless": false,
   "max_actions": 30,
   "max_session_seconds": 300,
   "max_repeated_action_repetitions": 3,
