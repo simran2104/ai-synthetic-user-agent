@@ -2,7 +2,7 @@ name: Synthetic User Agent
 
 on:
   schedule:
-    - cron: "*/2 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
       - name: Select random persona
         id: persona
         run: |
-          PERSONAS=("casual_browser" "product_researcher" "potential_buyer" "goal_oriented_buyer")
+          PERSONAS=("casual_browser" "product_researcher" "goal_oriented_buyer")
           PERSONA=${PERSONAS[$RANDOM % ${#PERSONAS[@]}]}
           echo "persona=$PERSONA" >> "$GITHUB_OUTPUT"
           echo "Selected persona: $PERSONA"
