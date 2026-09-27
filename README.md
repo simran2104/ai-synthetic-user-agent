@@ -1,111 +1,38 @@
-# 🤖 AI Web Analytics Agent
+## 🤖 AI Web Analytics Agent
 
-### Synthetic user behaviour analysis using Gemini and Playwright
+An AI-powered synthetic user agent that simulates realistic website behaviour using Google Gemini, Python, and Playwright.
 
-This project is an **AI-powered synthetic web-user agent** designed to analyse how users interact with a web application.
-
-Instead of relying only on manually defined test scenarios or real user traffic, the agent uses **LLM-driven personas** to simulate different types of website visitors. The agent observes the website, decides what a user would do next, performs the action through a real browser, and records the resulting journey for web analytics.
-
-The current experiment uses **Sarvotam Furniture (Furniture Mart)** as the target web application.
+The agent uses different user personas to browse a Django furniture website and generates session data that can be used for web analytics.
 
 🌐 **Target Website:** https://furniture-mart-ps3p.onrender.com/
 
 ---
 
-## 🏗️ System Architecture
+### 🏗️ System Architecture
 
-The system follows an **observation → decision → action** loop.
+<img width="2889" height="654" alt="mermaid-diagram" src="https://github.com/user-attachments/assets/3db8cc37-8bb5-44a7-8251-559d5d614847" />
 
-```mermaid
-flowchart LR
-    A["Synthetic User Persona"]
-    B["Python Agent"]
-    C["Gemini LLM"]
-    D["next_action"]
-    E["Python Validation"]
-    F["Playwright"]
-    G["Furniture Mart"]
-    H["Page Observation"]
-    I["Session Logs"]
-    J["Google Analytics 4"]
-
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> H
-    H --> B
-
-    F --> I
-    G --> J
-```
-
-### How it works
-
-1. A **synthetic persona** defines the type of user and their browsing goal.
-2. The Python agent opens the target website using Playwright.
-3. The agent collects a structured observation of the current page.
-4. The observation is provided to Gemini.
-5. Gemini selects the next action using the `next_action` function.
-6. Python validates the action before execution.
-7. Playwright performs the action in the browser.
-8. The resulting page is observed again.
-9. The cycle continues until the persona finishes or the session reaches its safety limits.
-10. Session information is recorded for later analytics.
+#### How it works
+1. A persona defines the user's goal.
+2. Python opens the website using Playwright.
+3. The agent observes the current page.
+4. Gemini generates a structured session_plan.
+5. Python validates the complete plan.
+6. Playwright executes the actions.
+7. Session activity is recorded for analytics.
 
 ---
 
-## 🧠 AI Agent
+### 🧠 AI Agent
 
-Gemini is the only supported LLM provider.
-
-The agent uses a single structured function:
-
-```text
-next_action
-```
-
-Possible actions include:
-
-```text
-open_link
-search
-view_product
-go_back
-add_to_cart
-view_cart
-finish
-```
-
-The LLM does **not** directly control the browser.
-
-Instead, the interaction is controlled through Python:
-
-```text
-Gemini
-   │
-   │ structured action
-   ▼
-Python Validation
-   │
-   │ validated action
-   ▼
-Playwright
-   │
-   ▼
-Web Application
-```
+Gemini generates structured browser actions, while Python remains the control and safety layer.
 
 Python acts as the control and safety layer between the LLM and the browser.
 
-It validates:
-
+#### Python validates:
 - Allowed actions
-- Target URLs
+- URLs and website origin
 - Observed links and products
-- Website origin
 - Persona permissions
 - Cart permissions
 - Session limits
@@ -113,17 +40,15 @@ It validates:
 
 ---
 
-## 👥 Synthetic User Personas
+### 👥 Synthetic User Personas
 
 The agent can run sessions using different synthetic user behaviours.
-
-Example personas include:
 
 ```text
 Casual Browser
 Product Researcher
 Goal-Oriented Buyer
-Returning Customer
+Potential Buyer
 ```
 
 Each persona can have a different objective and browsing style.
@@ -132,11 +57,11 @@ This allows the same website to be explored from multiple simulated user perspec
 
 ---
 
-## 📊 Web Analytics
+### 📊 Web Analytics
 
 The project combines two sources of analytics.
 
-### Synthetic Agent Analytics
+#### Synthetic Agent Analytics
 
 The agent records information from its synthetic sessions, including:
 
@@ -161,7 +86,7 @@ GA4 provides an independent view of website activity, while the synthetic-agent 
 
 ---
 
-## 🌐 Target Web Application
+### 🌐 Target Web Application
 
 The current experiment uses **Sarvotam Furniture (Furniture Mart)** as the target web application.
 
@@ -183,32 +108,32 @@ The primary focus of this repository is the AI agent and the web analytics exper
 
 ---
 
-## 🚀 Getting Started
+### 🚀 Getting Started
 
-### 1. Clone the repository
+#### 1. Clone the repository
 
 ```bash
 git clone https://github.com/simran2104/ai-web-analytics-agent.git
 cd ai-web-analytics-agent
 ```
 
-### 2. Install dependencies
+#### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Install Playwright Chromium
+#### 3. Install Playwright Chromium
 
 ```bash
 python -m playwright install chromium
 ```
 
-### 4. Configure Gemini
+#### 4. Configure Gemini
 
 Set the Gemini API key in your shell environment.
 
-#### Windows PowerShell
+##### Windows PowerShell
 
 ```powershell
 $env:GEMINI_API_KEY="YOUR_KEY_HERE"
@@ -218,9 +143,9 @@ The Gemini API key is read from the `GEMINI_API_KEY` environment variable.
 
 ---
 
-## 🧪 Testing
+### 🧪 Testing
 
-### Gemini Smoke Test
+#### Gemini Smoke Test
 
 Run the structured Gemini test without launching a browser:
 
@@ -228,11 +153,11 @@ Run the structured Gemini test without launching a browser:
 python main.py --gemini-test
 ```
 
-This verifies that Gemini can return a valid structured `next_action`.
+This verifies that Gemini can return a valid structured `session_plan`.
 
 ---
 
-### 🌐 Browser Smoke Test
+#### 🌐 Browser Smoke Test
 
 Run the Playwright browser test:
 
@@ -249,7 +174,7 @@ This test:
 - Extracts a compact page observation
 ---
 
-## 🤖 Run the AI Agent
+### 🤖 Run the AI Agent
 
 After the Gemini smoke test succeeds, run one synthetic-user session:
 
@@ -274,7 +199,7 @@ agent_config/settings.json
 Gemini receives exactly one structured function:
 
 ```text
-next_action
+session_plan
 ```
 
 The Python agent validates the returned action and then dispatches it to Playwright.
@@ -285,37 +210,20 @@ The agent does not perform checkout, payments, or online purchases.
 
 ---
 
-## 🔍 Diagnose Structured Tool Calls
+### 🛠️ Technology Stack
 
-To test the active Gemini provider against a live homepage observation:
-
-```bash
-python diagnose_llm.py
-```
-
-The diagnostic provides one `next_action` schema and a fresh homepage observation.
-
-It reports `PASS` only when Gemini returns exactly one schema-valid structured action.
-
-Gemini logs record request metadata but do not store API credentials.
-
---- 
-
-
-## 🛠️ Technology Stack
-
-### AI & Agent
+#### AI & Agent
 
 - Python
-- Google Gemini
+- Google Gemini - gemini-3.5-flash-lite
 - Structured Function Calling
 
-### Browser Automation
+#### Browser Automation
 
 - Playwright
 - Chromium
 
-### Target Web Application
+#### Target Web Application
 
 - Django
 - Python
@@ -325,16 +233,16 @@ Gemini logs record request metadata but do not store API credentials.
 - Bootstrap
 - SQLite
 
-### Analytics
+#### Analytics
 
 - Google Analytics 4
 - Synthetic session/event logs
 
-### Deployment
+#### Deployment
 
 - Render
 
-### Version Control
+#### Version Control
 
 - Git
 - GitHub
