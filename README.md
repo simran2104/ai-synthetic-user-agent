@@ -1,217 +1,340 @@
-# 🛋️ Furniture Mart - Sarvotam Furniture
-### A home with a story.
+# 🤖 AI Web Analytics Agent
 
-**Sarvotam Furniture** is a Django storefront where users can browse furniture products, view product details, manage a showroom shortlist, create accounts, and submit enquiries.
+### Synthetic user behaviour analysis using Gemini and Playwright
 
-🌐 **Live Website:** [furniture-mart-ps3p.onrender.com](https://furniture-mart-ps3p.onrender.com/)
+This project is an **AI-powered synthetic web-user agent** designed to analyse how users interact with a web application.
 
-GA4 page-view tracking is configured in the shared `templates/base.html` template, so it loads on pages that inherit the base. The Measurement ID is defined there once and reused by the Google tag configuration; no custom events are configured.
+Instead of relying only on manually defined test scenarios or real user traffic, the agent uses **LLM-driven personas** to simulate different types of website visitors. The agent observes the website, decides what a user would do next, performs the action through a real browser, and records the resulting journey for web analytics.
 
----
+The current experiment uses **Sarvotam Furniture (Furniture Mart)** as the target web application.
 
-## ✨ Features
-
-* 🛋️ Browse furniture products
-* 🔎 View detailed product information
-* 🛒 Add products to the shopping cart
-* ➕ Update product quantities in the cart
-* 👤 User registration and authentication
-* 🏬 Request showroom visits and product enquiries
-* 📱 Responsive and user-friendly interface
-* 🔐 Django-based backend and authentication
-* 🗄️ Database-driven product and order management
+🌐 **Target Website:** https://furniture-mart-ps3p.onrender.com/
 
 ---
 
-## 🖥️ Tech Stack
+## 🏗️ System Architecture
 
-### Backend
+The system follows an **observation → decision → action** loop.
 
-* **Python**
-* **Django**
+```mermaid
+flowchart LR
+    A["Synthetic User Persona"]
+    B["Python Agent"]
+    C["Gemini LLM"]
+    D["next_action"]
+    E["Python Validation"]
+    F["Playwright"]
+    G["Furniture Mart"]
+    H["Page Observation"]
+    I["Session Logs"]
+    J["Google Analytics 4"]
 
-### Frontend
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> B
 
-* **HTML5**
-* **CSS3**
-* **JavaScript**
-* **Bootstrap**
+    F --> I
+    G --> J
+```
 
-### Database
+### How it works
 
-* **SQLite** for development
+1. A **synthetic persona** defines the type of user and their browsing goal.
+2. The Python agent opens the target website using Playwright.
+3. The agent collects a structured observation of the current page.
+4. The observation is provided to Gemini.
+5. Gemini selects the next action using the `next_action` function.
+6. Python validates the action before execution.
+7. Playwright performs the action in the browser.
+8. The resulting page is observed again.
+9. The cycle continues until the persona finishes or the session reaches its safety limits.
+10. Session information is recorded for later analytics.
 
-### Deployment
+---
 
-* **Render**
+## 🧠 AI Agent
 
-### Version Control
+Gemini is the only supported LLM provider.
 
-* **Git**
-* **GitHub**
+The agent uses a single structured function:
+
+```text
+next_action
+```
+
+Possible actions include:
+
+```text
+open_link
+search
+view_product
+go_back
+add_to_cart
+view_cart
+finish
+```
+
+The LLM does **not** directly control the browser.
+
+Instead, the interaction is controlled through Python:
+
+```text
+Gemini
+   │
+   │ structured action
+   ▼
+Python Validation
+   │
+   │ validated action
+   ▼
+Playwright
+   │
+   ▼
+Web Application
+```
+
+Python acts as the control and safety layer between the LLM and the browser.
+
+It validates:
+
+- Allowed actions
+- Target URLs
+- Observed links and products
+- Website origin
+- Persona permissions
+- Cart permissions
+- Session limits
+- Repeated actions
+
+---
+
+## 👥 Synthetic User Personas
+
+The agent can run sessions using different synthetic user behaviours.
+
+Example personas include:
+
+```text
+Casual Browser
+Product Researcher
+Goal-Oriented Buyer
+Returning Customer
+```
+
+Each persona can have a different objective and browsing style.
+
+This allows the same website to be explored from multiple simulated user perspectives.
+
+---
+
+## 📊 Web Analytics
+
+The project combines two sources of analytics.
+
+### Synthetic Agent Analytics
+
+The agent records information from its synthetic sessions, including:
+
+- User persona
+- Actions performed
+- Pages visited
+- Product views
+- Searches
+- Cart interactions
+- Session duration
+- Number of actions
+- Journey path
+- Session outcome
+
+This data can be used to analyse how different synthetic users navigate the website.
+
+#### Google Analytics 4
+
+Google Analytics 4 is configured on the target website for page-view analytics.
+
+GA4 provides an independent view of website activity, while the synthetic-agent logs provide detailed information about the agent's decisions and journeys.
+
+---
+
+## 🌐 Target Web Application
+
+The current experiment uses **Sarvotam Furniture (Furniture Mart)** as the target web application.
+
+The website is a Django-based furniture storefront that allows visitors to:
+
+- Browse furniture products
+- Search for products
+- View product details
+- Add products to a shopping cart
+- Manage cart quantities
+- Create accounts
+- Submit showroom and product enquiries
+
+The website serves as the **environment in which the synthetic users operate**.
+
+The primary focus of this repository is the AI agent and the web analytics experiment, rather than the storefront itself.
+
+🌐 **Live Website:** https://furniture-mart-ps3p.onrender.com/
 
 ---
 
 ## 🚀 Getting Started
 
-Follow these steps to run Sarvotam Furniture locally.
-
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/simran2104/furniture-mart.git
-cd furniture-mart
+git clone https://github.com/simran2104/ai-web-analytics-agent.git
+cd ai-web-analytics-agent
 ```
 
-### 2. Create a virtual environment
-
-```bash
-python -m venv venv
-```
-
-Activate it:
-
-**Windows**
-
-```bash
-venv\Scripts\activate
-```
-
-**macOS / Linux**
-
-```bash
-source venv/bin/activate
-```
-
-### 3. Install dependencies
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Apply database migrations
+### 3. Install Playwright Chromium
 
 ```bash
-python manage.py migrate
-```
-
-### 5. Create a superuser
-
-```bash
-python manage.py createsuperuser
-```
-
-### 6. Start the development server
-
-```bash
-python manage.py runserver
-```
-
-Open your browser and visit:
-
-```text
-http://127.0.0.1:8000/
-```
-
-## Synthetic Browser Agent
-
-The standalone `ai_agent/` package uses Gemini with Playwright to observe and interact with the Furniture Mart site. It does not complete purchases. The storefront supports showroom enquiries, but has no online checkout, payment, or order workflow.
-
-Install the Python dependencies from the repository root:
-
-```bash
-pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-Set `GEMINI_API_KEY` in your shell environment before using Gemini. Never put the key in source files, JSON settings, documentation, or version control. Gemini usage is subject to the quota for your Google AI Studio project.
+### 4. Configure Gemini
 
-Run the structured Gemini smoke test without launching a browser:
+Set the Gemini API key in your shell environment.
+
+#### Windows PowerShell
+
+```powershell
+$env:GEMINI_API_KEY="YOUR_KEY_HERE"
+```
+
+The Gemini API key is read from the `GEMINI_API_KEY` environment variable.
+
+---
+
+## 🧪 Testing
+
+### Gemini Smoke Test
+
+Run the structured Gemini test without launching a browser:
 
 ```bash
 python main.py --gemini-test
 ```
 
-### Browser Observation Smoke Test
+This verifies that Gemini can return a valid structured `next_action`.
 
-Install the Playwright Chromium browser once, if not already installed:
+---
 
-```bash
-python -m playwright install chromium
-```
+### 🌐 Browser Smoke Test
 
-Run the browser smoke test from the repository root:
+Run the Playwright browser test:
 
 ```bash
 python main.py --browser-test
 ```
 
-The smoke test launches Chromium, opens the configured Furniture Mart homepage, waits for the Render service if it is waking, and prints the URL, title, and a compact observation of headings, links, buttons, inputs, visible text, and product cards. It does not call Gemini or interact with the site. Screenshots are saved under `agent_data/sessions/` only when `screenshots` is `true` in `agent_config/settings.json`.
+This test:
 
-Example output (product data and screenshot filename vary):
+- Launches Chromium
+- Opens the configured Furniture Mart website
+- Handles Render cold starts
+- Waits for the website to become available
+- Extracts a compact page observation
+---
 
-```text
-URL: https://furniture-mart-ps3p.onrender.com/
-Title: Sarvotam Furniture | A home with a story
-Observation:
-{
-	"headings": ["Furniture for every corner of your home.", "Find your room"],
-	"links": [{"label": "Shop", "url": "https://furniture-mart-ps3p.onrender.com/products/"}],
-	"buttons": [{"label": "Accept", "type": "button"}],
-	"inputs": [{"name": "q", "type": "text", "placeholder": "Search furniture..."}],
-	"products": [{
-		"name": "Studio Transitional Dining Set",
-		"price": "₹2355",
-		"original_price": "₹3855",
-		"url": "https://furniture-mart-ps3p.onrender.com/product/studio-transitional-dining-set-16/"
-	}]
-}
-Screenshot: agent_data/sessions/browser-<timestamp>.png
-```
+## 🤖 Run the AI Agent
 
-Browser behavior is controlled in `agent_config/settings.json`. `headless: false` (the development default) shows Chromium; set it to `true` for a background run. `startup_timeout_seconds` controls the total wait for the site, and `startup_retry_interval_seconds` controls the delay between attempts. The configured browser destination is restricted to `https://furniture-mart-ps3p.onrender.com/`.
-
-Render's free service can sleep while idle. During a cold start, it may return HTTP 503 or a page titled “Application loading” while the instance wakes. The smoke test recognizes those responses and retries until the configured timeout; if the site remains unavailable, it reports the last status and title instead of printing a successful observation.
-
-Run the browser unit tests without contacting the live site:
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-Troubleshooting:
-
-* If Playwright reports that its Chromium executable is missing, rerun `python -m playwright install chromium`.
-* If the smoke test reaches its startup timeout with HTTP 503, try again later or increase `startup_timeout_seconds`; the Render instance may still be waking or unavailable.
-* If Chromium cannot open in headed mode, check that a desktop session is available or set `headless` to `true`.
-
-### Gemini Browser Agent
-
-Gemini is the only supported LLM provider. The model is configured in `agent_config/settings.json` as `gemini-3.8-flash`.
-
-Set `GEMINI_API_KEY` in the process environment before running Gemini commands. Do not put the key in source files, JSON settings, documentation, or version control. The key is not stored by the application. Gemini API access and quota depend on your Google AI Studio project and applicable usage limits.
-
-Run the structured Gemini smoke test (no browser is launched):
-
-```bash
-python main.py --gemini-test
-```
-
-After the smoke test returns a valid structured action, run one headed browser session with the read-only persona:
+After the Gemini smoke test succeeds, run one synthetic-user session:
 
 ```bash
 python main.py --agent-test --persona casual_browser
 ```
 
-Gemini receives exactly one function, `next_action`. The Python agent validates arguments and action permissions before dispatching to Playwright. Chromium is visible by default (`headless: false`). Cart actions remain disabled unless both global configuration and persona permission allow them. No checkout, payments, or online orders are supported.
+Chromium is visible by default.
 
-### Diagnose Structured Tool Calls
+To run the browser in the background, set:
 
-To probe the active provider against a real homepage observation, run:
+```json
+"headless": true
+```
+
+in:
+
+```text
+agent_config/settings.json
+```
+
+Gemini receives exactly one structured function:
+
+```text
+next_action
+```
+
+The Python agent validates the returned action and then dispatches it to Playwright.
+
+Cart actions remain disabled unless both global configuration and persona permissions allow them.
+
+The agent does not perform checkout, payments, or online purchases.
+
+---
+
+## 🔍 Diagnose Structured Tool Calls
+
+To test the active Gemini provider against a live homepage observation:
 
 ```bash
 python diagnose_llm.py
 ```
 
-The diagnostic supplies one `next_action` schema and a fresh live homepage observation. It reports PASS only for exactly one schema-valid structured call; an HTTP success by itself is not sufficient. Gemini logs record request metadata only and do not capture credentials or raw authenticated requests.
+The diagnostic provides one `next_action` schema and a fresh homepage observation.
 
+It reports `PASS` only when Gemini returns exactly one schema-valid structured action.
+
+Gemini logs record request metadata but do not store API credentials.
+
+--- 
+
+
+## 🛠️ Technology Stack
+
+### AI & Agent
+
+- Python
+- Google Gemini
+- Structured Function Calling
+
+### Browser Automation
+
+- Playwright
+- Chromium
+
+### Target Web Application
+
+- Django
+- Python
+- HTML5
+- CSS3
+- JavaScript
+- Bootstrap
+- SQLite
+
+### Analytics
+
+- Google Analytics 4
+- Synthetic session/event logs
+
+### Deployment
+
+- Render
+
+### Version Control
+
+- Git
+- GitHub
