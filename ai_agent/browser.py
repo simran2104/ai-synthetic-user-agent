@@ -113,7 +113,7 @@ class BrowserSession:
             self._context = self._browser.new_context()
             self._context.route("**/*", self._guard_navigation)
             self.page = self._context.new_page()
-            self._page.on(
+            self.page.on(
                 "request",
                 lambda request: (
                     print(f"GA4 REQUEST: {request.url}")
