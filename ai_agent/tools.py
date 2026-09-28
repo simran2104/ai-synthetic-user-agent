@@ -16,13 +16,7 @@ from .browser import ALLOWED_ORIGIN, BrowserSession, BrowserSessionError
 
 
 logger = logging.getLogger(__name__)
-FINISH_REASONS = (
-    "goal_completed",
-    "no_suitable_product",
-    "maximum_actions_reached",
-    "agent_error",
-    "user_journey_complete",
-)
+
 BLOCKED_PATHS = (
     "/cart/add/",
     "/cart/update/",
@@ -124,7 +118,17 @@ ACTION_ARGUMENT_SCHEMAS: dict[str, dict[str, Any]] = {
     "go_back": {"type": "object", "properties": {}, "required": []},
     "add_to_cart": {"type": "object", "properties": {"product_name": {"type": "string", "minLength": 1, "maxLength": 180}}, "required": ["product_name"]},
     "view_cart": {"type": "object", "properties": {}, "required": []},
-    "finish": {"type": "object", "properties": {"reason": {"type": "string", "enum": list(FINISH_REASONS)}}, "required": ["reason"]},
+    "finish": {
+        "type": "object",
+        "properties": {
+            "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+            }
+        },
+        "required": ["reason"],
+    },
 }
 
 
