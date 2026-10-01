@@ -8,7 +8,8 @@ The agent uses different user personas to browse a Django furniture website and 
 
 ## 🏗️ System Architecture
 
-<img width="2889" height="654" alt="mermaid-diagram" src="https://github.com/user-attachments/assets/3db8cc37-8bb5-44a7-8251-559d5d614847" />
+<img width="2000" height="1414" alt="AI Web Analytics Architecture Diagram" src="https://github.com/user-attachments/assets/92cbc124-7a40-4b15-8131-26521a971d2b" />
+
 
 ### How it works
 
