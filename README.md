@@ -91,7 +91,7 @@ This allows continuous synthetic-user activity without requiring a local machine
 
 ## 🌐 Target Web Application
 
-The experiment uses **Sarvotam Furniture (Furniture Mart)** as the target web application. Its Django source code and deployment configuration are in `../furniture-mart`.
+The experiment uses **Sarvotam Furniture (Furniture Mart)** as the target web application.
 
 The Django-based furniture storefront allows visitors to:
 
@@ -112,8 +112,8 @@ The website is the environment in which the synthetic users operate. The primary
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/simran2104/ai-web-analytics-agent.git
-cd ai-web-analytics-agent
+git clone https://github.com/simran2104/ai-synthetic-user-agent.git
+cd ai-synthetic-user-agent
 ```
 
 ### 2. Install dependencies
