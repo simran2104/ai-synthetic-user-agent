@@ -1,9 +1,6 @@
 __pycache__/
 *.py[cod]
-*.sqlite3
 .env
-staticfiles/
-media/
 agent_data/sessions/*.png
 agent_data/debug/
 .venv/
