@@ -1,4 +1,4 @@
-## 🤖 AI Web Analytics Agent
+## 🤖 AI Synthetic User Agent
 
 An AI-powered synthetic user agent that simulates realistic website behaviour using **Google Gemini, Python, and Playwright**.
 
