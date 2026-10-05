@@ -8,8 +8,7 @@ The agent uses different user personas to browse a Django furniture website and 
 
 ## 🏗️ System Architecture
 
-<img width="2000" height="1414" alt="AI Web Analytics Architecture Diagram" src="https://github.com/user-attachments/assets/92cbc124-7a40-4b15-8131-26521a971d2b" />
-
+<img width="2000" height="1414" alt="AI Web Analytics Architecture Diagram" src="https://github.com/simran2104/ai-synthetic-user-agent/blob/main/architecture/AI_Synthetic_User_Agent_Workflow.gif" />
 
 ### How it works
 
