@@ -4,8 +4,6 @@ An AI-powered synthetic user agent that simulates realistic website behaviour us
 
 The agent uses different user personas to browse a Django furniture website and generates session data for web analytics.
 
-This folder contains the synthetic-agent code. The Furniture Mart website source is maintained separately in the sibling `furniture-mart` folder.
-
 🌐 **Target Website:** https://furniture-mart-ps3p.onrender.com/
 
 ## 🏗️ System Architecture
